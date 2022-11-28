@@ -10,6 +10,7 @@ library(tidyverse)
 library(rvest)
 library(modelr)
 library(mgcv)
+library(patchwork)
 set.seed(1)
 
 knitr::opts_chunk$set(
@@ -186,15 +187,15 @@ fit %>%
   broom::tidy() %>% 
   knitr::kable(digits = 4)
 
-## Question on what the appropriate plot is - why do we need both residuals and predictions? 
-modelr::add_residuals(birthweight, fit) %>% 
+resid = modelr::add_residuals(birthweight, fit) %>% 
   ggplot(aes(x = bwt, y = resid)) + 
   geom_point()
 
-modelr::add_predictions(birthweight, fit) %>% 
+pred = modelr::add_predictions(birthweight, fit) %>% 
   ggplot(aes(x = bwt, y = pred)) + 
   geom_point()
 
+plot_of_model = resid + pred
 ```
 
 When building my regression model, I included factors that are hypothesized to impact birthweight including the mother's race and smoking habits, the baby's sex, gestational age, and number of live births the mother had prior to this pregnancy. 
