@@ -10,7 +10,6 @@ library(tidyverse)
 library(rvest)
 library(modelr)
 library(mgcv)
-library(patchwork)
 set.seed(1)
 
 knitr::opts_chunk$set(
@@ -48,11 +47,39 @@ weather_df =
   select(name, id, everything())
 ```
 
-## Bootstrapping 
+## 5000 bootstrap samples
 
 ```{r, warning = FALSE, message = FALSE}
+weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::glance)) %>% 
+  select(-strap, -models) %>% 
+  unnest(results) %>% 
+  ggplot(aes(x = r.squared)) + geom_density()
 
+```
 
+Plot interpretation: The 5000 bootstrap sample distribution appears left-skewed. Majority of r hat^2 values in the distribution are closer to 1, which indicates our model is a good fit for this data. 
+
+## 95% confidence intervals for 5000 bootstrap samples
+
+```{r}
+weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::tidy)) %>% 
+  select(-strap, -models) %>% 
+  unnest(results) %>% 
+  select(id = `.id`, term, estimate) %>% 
+  pivot_wider(
+    names_from = term, 
+    values_from = estimate) %>% 
+  rename(beta0 = `(Intercept)`, beta1 = tmin) %>% 
+  mutate(log_b0b1 = log(beta0 * beta1)) %>% 
+  ggplot(aes(x = log_b0b1)) + geom_density()
 ```
 
 
@@ -154,6 +181,7 @@ all_unnested %>%
     x = "U.S. City",
     y = "Odds Ratio")
 ```
+
 On average, there is a lower odds of a homicide being unsolved if the victim is female because the odds ratios are mostly below 1. 
 
 # Problem 3 
@@ -182,23 +210,21 @@ fit = birthweight %>%
     mrace = fct_infreq(mrace),
     babysex = fct_infreq(babysex)) %>% 
     lm(bwt ~ mrace + smoken + babysex + gaweeks + parity + blength, data = .) 
-
+  
 fit %>% 
   broom::tidy() %>% 
   knitr::kable(digits = 4)
 
-resid = modelr::add_residuals(birthweight, fit) %>% 
-  ggplot(aes(x = bwt, y = resid)) + 
+predict_table = add_predictions(birthweight, fit) %>% 
+  select(bwt, pred, everything())
+
+modelr::add_residuals(predict_table, fit) %>% 
+  ggplot(aes(x = pred, y = resid)) + 
   geom_point()
 
-pred = modelr::add_predictions(birthweight, fit) %>% 
-  ggplot(aes(x = bwt, y = pred)) + 
-  geom_point()
-
-plot_of_model = resid + pred
 ```
 
-When building my regression model, I included factors that are hypothesized to impact birthweight including the mother's race and smoking habits, the baby's sex, gestational age, and number of live births the mother had prior to this pregnancy. 
+When building my regression model, I included factors that are hypothesized to impact birthweight including the mother's race and smoking habits, the baby's sex, gestational age, number of live births the mother had prior to this pregnancy, and baby's length. 
 
 ## 2 models for comparison
 
@@ -250,4 +276,5 @@ cv_mutated %>%
   mutate(model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
+
 Our model seems reasonable in comparison to the other two models, with RMSEs being fairly comparable. However the multi model has the lowest RMSEs of the threee, so it is technically the best fit. 
